@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=380, initial-scale=1.0">
+    <title>KBW's iHeart Radio Player</title>
+    <style>
+        body { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; background-color: #0d0d0d; color: #ff69b4; font-family: Arial, sans-serif;}
+        .cassette-player { background-color: #222; border-radius: 10px; padding: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); text-align: center; position: relative; width: 380px;}
+        iframe { border: none; width: 340px; height: 150px; margin: 10px 0;}
+        .controls { display: flex; align-items: center; justify-content: space-around; margin-top: 15px; width: 100%;}
+        button { padding: 8px 15px; font-size: 14px; background-color: #5c3a3a; color: white; border: none; border-radius: 5px; cursor: pointer; flex-shrink: 0;}
+        button:hover { background-color: #4a2a2a;}
+        .arrow { font-size: 20px; cursor: pointer; color: #ff69b4; margin: 0 5px;}
+        .bookmark-btn, .blacklist-btn { font-size: 24px; cursor: pointer; color: #ff69b4; background: none; border: none; padding: 0; margin: 0 5px;}
+        .popup-menu { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background-color: #222; color: #ff69b4; padding: 10px; border-radius: 5px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); z-index: 10; display: none; flex-direction: column; align-items: stretch; width: 250px; max-height: 300px; overflow-y: auto; border: 2px solid #5c3a3a; font-size: 14px;}
+        .popup-menu input[type="text"], .popup-menu textarea { margin-bottom: 8px; padding: 6px; background: #333; border: 1px solid #5c3a3a; color: #ff69b4; border-radius: 3px;}
+        .popup-menu button { width: auto; margin: 3px 0; padding: 6px 12px; font-size: 12px; display: block;}
+        .popup-menu label { margin: 5px 0; color: #ff69b4;}
+        .station-item { display: flex; justify-content: space-between; align-items: center; padding: 6px; margin: 3px 0; background-color: #333; border-radius: 3px; cursor: pointer;}
+        .station-item:hover { background-color: #444;}
+        .station-item span { flex-grow: 1;}
+        .remove-btn { background: none; color: #ff69b4; border: none; font-size: 16px; cursor: pointer;}
+        .remove-btn:hover{ color: #dda0dd;}
+
+        /* Import/Export Button Styling */
+        #importExportBtn {
+            position: fixed;
+            bottom: 24px;
+            left: 24px;
+            z-index: 100;
+            background: #222;
+            color: #ff69b4;
+            border: 2px solid #5c3a3a;
+            border-radius: 8px;
+            padding: 10px 18px;
+            font-size: 16px;
+            font-family: inherit;
+            font-weight: bold;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+            transition: background 0.2s, color 0.2s;
+        }
+        #importExportBtn:hover {
+            background: #5c3a3a;
+            color: #fff;
+        }
+        /* Import/Export Menu Styling */
+        #importExportMenu.popup-menu {
+            left: 140px;
+            bottom: 70px;
+            top: auto;
+            transform: none;
+            width: 320px;
+            min-width: 220px;
+            max-width: 90vw;
+        }
+        #importExportMenu textarea {
+            min-height: 60px;
+            resize: vertical;
+            font-family: monospace;
+        }
+        #importExportMenu label {
+            font-size: 13px;
+            color: #ff69b4;
+            margin-bottom: 4px;
+        }
+    </style>
+</head>
+<body>
+<!-- Import/Export Button (fixed, bottom left) -->
+<button id="importExportBtn" title="Import/Export Favorites">⇆ Favorites</button>
+
+<div class="cassette-player">
+    <iframe id="musicPlayer" src="" allow="autoplay"></iframe>
+    <div class="controls">
+        <button class="bookmark-btn" id="bookmarkBtn">☆</button>
+        <span class="arrow" id="prevBtn">◀</span>
+        <button id="randomStationBtn">Random Station</button>
+        <span class="arrow" id="nextBtn">▶</span>
+        <button class="blacklist-btn" id="blacklistBtn">⊘</button>
+    </div>
+    <!-- Save As Menu -->
+    <div class="popup-menu" id="saveAsMenu">
+        <input type="text" id="bookmarkTitle" placeholder="Enter Station Name">
+        <button onclick="saveBookmark()">Save Station</button>
+        <button onclick="closeMenu('saveAsMenu')">Cancel</button>
+    </div>
+    <!-- Favorites Menu -->
+    <div class="popup-menu" id="favoritesMenu">
+        <h3>Favorites</h3>
+        <div id="favoritesList"></div>
+        <label><input type="checkbox" id="favoritesOnlyToggle" onchange="toggleFavoritesOnly()">Favorites Only</label>
+        <button onclick="closeMenu('favoritesMenu')">Close</button>
+    </div>
+    <!-- Unblacklist Menu -->
+    <div class="popup-menu" id="unblacklistMenu">
+        <h3>Blacklisted Stations</h3>
+        <div id="blacklistList"></div>
+        <button onclick="closeMenu('unblacklistMenu')">Close</button>
+    </div>
+    <!-- Station Info Menu -->
+    <div class="popup-menu" id="stationInfoMenu">
+        <p id="stationInfo"></p>
+        <button onclick="closeMenu('stationInfoMenu')">Close</button>
+    </div>
+    <!-- Name Station Menu (Prev Arrow Hold) -->
+    <div class="popup-menu" id="nameStationMenu">
+        <input type="text" id="nameStationInput" placeholder="Enter Station Name">
+        <button onclick="setStationName()">Set Name</button>
+        <button onclick="closeMenu('nameStationMenu')">Cancel</button>
+    </div>
+    <!-- Custom Station Menu (Random Hold) -->
+    <div class="popup-menu" id="customStationMenu">
+        <input type="text" id="customStationInput" placeholder="5-digit pin, URL, or playlist #">
+        <button onclick="goToCustomStation()">Go</button>
+        <button onclick="closeMenu('customStationMenu')">Cancel</button>
+    </div>
+    <!-- Import/Export Menu -->
+    <div class="popup-menu" id="importExportMenu">
+        <h3 style="margin-top:0;">Import / Export Favorites</h3>
+        <label for="exportFavoritesArea">Exported JSON:</label>
+        <textarea id="exportFavoritesArea" readonly style="margin-bottom:8px;"></textarea>
+        <button onclick="copyExportedFavorites()">Copy to Clipboard</button>
+        <hr style="border:0;border-top:1px solid #5c3a3a;margin:10px 0;">
+        <label for="importFavoritesArea">Import JSON:</label>
+        <textarea id="importFavoritesArea" placeholder="Paste favorites JSON here"></textarea>
+        <button onclick="importFavorites()">Import Favorites</button>
+        <button onclick="closeMenu('importExportMenu')">Close</button>
+        <div id="importExportMsg" style="color:#ff69b4;margin-top:6px;font-size:13px;"></div>
+    </div>
+</div>
+<script>
+    // --- Custom iHeartRadio stations and playlists ---
+    const customStations = [
+        "https://www.iheart.com/favorites/beos-8105348763/?embed=true&theme=dark",
+        "https://www.iheart.com/playlist/beos-punk-playlist-8105348763-AAR4Yek756Zxx5KmNvbvxr/?embed=true&theme=dark",
+        "https://www.iheart.com/playlist/pop-punk-hits-312064750-XTdagna5iT8Vzrk28q5WK6/?embed=true&theme=dark",
+        "559055"
+    ];
+
+    // --- Helper: Normalize and build embed URLs ---
+    function normalizeIHeartUrl(input) {
+        if (/^\d+$/.test(input)) {
+            return `https://www.iheart.com/artist/${input}/?embed=true&theme=dark`;
+        }
+        let url = input.trim().replace(/\/+$/, "");
+        let hasEmbed = url.includes("embed=true");
+        let hasTheme = url.includes("theme=dark");
+        if (!hasEmbed && !hasTheme) url += url.includes("?") ? "&embed=true&theme=dark" : "?embed=true&theme=dark";
+        else if (!hasEmbed) url += url.includes("?") ? "&embed=true" : "?embed=true";
+        else if (!hasTheme) url += url.includes("?") ? "&theme=dark" : "?theme=dark";
+        return url;
+    }
+
+    // --- Station Pool: sandwich custom stations between 58768 and 58769 ---
+    const stationPoolStart = 10000;
+    const stationPoolEnd = 99999;
+
+    function buildStationPool() {
+        let pool = [];
+        for (let i = stationPoolStart; i <= stationPoolEnd; i++) {
+            if (i === 58769) {
+                for (const custom of customStations) pool.push(custom);
+            }
+            pool.push(i);
+        }
+        return pool;
+    }
+    const stationPool = buildStationPool();
+
+    // --- State ---
+    function getFirstCustomStationIndex() {
+        for (let i = 0; i < stationPool.length; i++) {
+            if (typeof stationPool[i] === "string" && customStations.includes(stationPool[i])) {
+                return i;
+            }
+        }
+        return 0;
+    }
+    let currentStationIndex = getFirstCustomStationIndex(); // Start on first custom
+    let bookmarks = JSON.parse(localStorage.getItem('bookmarks') || '[]');
+    let blacklist = JSON.parse(localStorage.getItem('blacklist') || '[]');
+    let favoritesOnly = localStorage.getItem('favoritesOnly') === 'true' || false;
+    let stationNames = JSON.parse(localStorage.getItem('stationNames') || '{}');
+
+    const musicPlayer = document.getElementById('musicPlayer');
+    const bookmarkBtn = document.getElementById('bookmarkBtn');
+    const prevBtn = document.getElementById('prevBtn');
+    const randomStationBtn = document.getElementById('randomStationBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const blacklistBtn = document.getElementById('blacklistBtn');
+    const saveAsMenu = document.getElementById('saveAsMenu');
+    const favoritesMenu = document.getElementById('favoritesMenu');
+    const unblacklistMenu = document.getElementById('unblacklistMenu');
+    const stationInfoMenu = document.getElementById('stationInfoMenu');
+    const favoritesList = document.getElementById('favoritesList');
+    const blacklistList = document.getElementById('blacklistList');
+    const favoritesOnlyToggle = document.getElementById('favoritesOnlyToggle');
+    favoritesOnlyToggle.checked = favoritesOnly;
+    const nameStationMenu = document.getElementById('nameStationMenu');
+    const nameStationInput = document.getElementById('nameStationInput');
+    const customStationMenu = document.getElementById('customStationMenu');
+    const customStationInput = document.getElementById('customStationInput');
+
+    // Import/Export
+    const importExportBtn = document.getElementById('importExportBtn');
+    const importExportMenu = document.getElementById('importExportMenu');
+    const exportFavoritesArea = document.getElementById('exportFavoritesArea');
+    const importFavoritesArea = document.getElementById('importFavoritesArea');
+    const importExportMsg = document.getElementById('importExportMsg');
+
+    // --- Station Handling ---
+    function isBlacklisted(station) {
+        let id = typeof station === "number" ? String(station) : station;
+        return blacklist.includes(id);
+    }
+    function isValidStation(station) {
+        if (isBlacklisted(station)) return false;
+        if (favoritesOnly && !bookmarks.some(b => b.id === String(station))) return false;
+        return true;
+    }
+    function getRandomStationIndex() {
+        let attempts = 0;
+        const maxAttempts = 1000;
+        let pool = stationPool;
+        if (favoritesOnly && bookmarks.length > 0) {
+            pool = bookmarks.map(b => b.id);
+        }
+        let idx;
+        do {
+            idx = Math.floor(Math.random() * pool.length);
+            if (attempts++ > maxAttempts) {
+                alert("No valid stations found");
+                return null;
+            }
+        } while (!isValidStation(pool[idx]));
+        return stationPool.indexOf(pool[idx]);
+    }
+    function changeStation(direction) {
+        let idx = currentStationIndex;
+        let attempts = 0;
+        const maxAttempts = 100000;
+        do {
+            idx += direction;
+            if (idx < 0) idx = stationPool.length - 1;
+            if (idx >= stationPool.length) idx = 0;
+            if (attempts++ > maxAttempts) {
+                alert("No valid stations found");
+                return null;
+            }
+        } while (!isValidStation(stationPool[idx]));
+        return idx;
+    }
+
+    // --- Player Update ---
+    function updatePlayerByIndex(idx) {
+        currentStationIndex = idx;
+        let station = stationPool[idx];
+        let src = (typeof station === "number" || /^\d+$/.test(station))
+            ? `https://www.iheart.com/artist/${station}/?embed=true&theme=dark`
+            : normalizeIHeartUrl(station);
+        musicPlayer.src = src;
+        updateStationInfo(station);
+    }
+    function updateStationInfo(station) {
+        const id = typeof station === "number" ? String(station) : station;
+        const stationName = stationNames[id] || `Station ${id}`;
+        document.getElementById('stationInfo').textContent = `Now Playing: ${stationName}`;
+    }
+
+    // --- UI Menus and Bookmarks ---
+    function showMenu(menuId) {
+        closeAllMenus();
+        document.getElementById(menuId).style.display = 'flex';
+    }
+    function closeMenu(menuId) {
+        document.getElementById(menuId).style.display = 'none';
+        if (menuId === 'importExportMenu') {
+            importExportMsg.textContent = '';
+            importFavoritesArea.value = '';
+        }
+    }
+    function closeAllMenus() {
+        const menus = document.querySelectorAll('.popup-menu');
+        menus.forEach(menu => menu.style.display = 'none');
+    }
+    function toggleFavoritesOnly() {
+        favoritesOnly = !favoritesOnly;
+        localStorage.setItem('favoritesOnly', favoritesOnly);
+        favoritesOnlyToggle.checked = favoritesOnly;
+        let currentStation = stationPool[currentStationIndex];
+        if (favoritesOnly && !bookmarks.some(b => b.id === String(currentStation))) {
+            const idx = getRandomStationIndex();
+            if (idx !== null) updatePlayerByIndex(idx);
+        }
+    }
+    function saveBookmark() {
+        let station = stationPool[currentStationIndex];
+        const id = typeof station === "number" ? String(station) : station;
+        const stationName = document.getElementById('bookmarkTitle').value || `Station ${id}`;
+        stationNames[id] = stationName;
+        localStorage.setItem('stationNames', JSON.stringify(stationNames));
+        const existingIndex = bookmarks.findIndex(b => b.id === id);
+        if (existingIndex > -1) {
+            bookmarks[existingIndex].name = stationName;
+        } else {
+            bookmarks.push({ id: id, name: stationName });
+        }
+        localStorage.setItem('bookmarks', JSON.stringify(bookmarks));
+        updateFavoritesList();
+        closeMenu('saveAsMenu');
+    }
+    function updateFavoritesList() {
+        favoritesList.innerHTML = '';
+        bookmarks.forEach(bookmark => {
+            const stationItem = document.createElement('div');
+            stationItem.className = 'station-item';
+            stationItem.innerHTML = `
+                <span onclick="playStation('${bookmark.id}')">${bookmark.name || `Station ${bookmark.id}`}</span>
+                <button class="remove-btn" onclick="removeBookmark('${bookmark.id}')">⊘</button>
+            `;
+            favoritesList.appendChild(stationItem);
+        });
+    }
+    function removeBookmark(stationId) {
+        bookmarks = bookmarks.filter(bookmark => bookmark.id !== stationId);
+        localStorage.setItem('bookmarks', JSON.stringify(bookmarks));
+        updateFavoritesList();
+    }
+    function updateBlacklistList() {
+        blacklistList.innerHTML = '';
+        blacklist.forEach(stationId => {
+            const stationItem = document.createElement('div');
+            stationItem.className = 'station-item';
+            stationItem.innerHTML = `
+                <span onclick="playStation('${stationId}')">Station ${stationId}</span>
+                <button class="remove-btn" onclick="removeFromBlacklist('${stationId}')">⊘</button>
+            `;
+            blacklistList.appendChild(stationItem);
+        });
+    }
+    function addToBlacklist() {
+        let station = stationPool[currentStationIndex];
+        let id = typeof station === "number" ? String(station) : station;
+        if (!isBlacklisted(id)) {
+            blacklist.push(id);
+            localStorage.setItem('blacklist', JSON.stringify(blacklist));
+            updateBlacklistList();
+            const idx = changeStation(1);
+            if (idx !== null) updatePlayerByIndex(idx);
+        }
+    }
+    function removeFromBlacklist(stationId) {
+        blacklist = blacklist.filter(id => id !== stationId);
+        localStorage.setItem('blacklist', JSON.stringify(blacklist));
+        updateBlacklistList();
+    }
+    function playStation(stationId) {
+        let idx = stationPool.findIndex(st => String(st) === stationId);
+        if (idx === -1) idx = 0;
+        updatePlayerByIndex(idx);
+        closeAllMenus();
+    }
+
+    // --- Name Station (Prev Arrow Hold) ---
+    function setStationName() {
+        let station = stationPool[currentStationIndex];
+        const id = typeof station === "number" ? String(station) : station;
+        const newName = nameStationInput.value.trim();
+        if (newName) {
+            stationNames[id] = newName;
+            localStorage.setItem('stationNames', JSON.stringify(stationNames));
+            updateStationInfo(station);
+        }
+        closeMenu('nameStationMenu');
+    }
+
+    // --- Custom Station (Random Hold) ---
+    function goToCustomStation() {
+        const val = customStationInput.value.trim();
+        let url;
+        if (/^\d{5,}$/.test(val)) {
+            url = normalizeIHeartUrl(val);
+        } else if (/^https?:\/\//.test(val)) {
+            url = normalizeIHeartUrl(val);
+        } else if (/^\d+$/.test(val)) {
+            url = normalizeIHeartUrl(val);
+        } else if (/playlist/i.test(val)) {
+            url = normalizeIHeartUrl(val);
+        } else {
+            alert("Enter a valid 5-digit pin, iHeart URL, or playlist number.");
+            return;
+        }
+        // Add to stationPool if not present, then play
+        let idx = stationPool.findIndex(st => normalizeIHeartUrl(String(st)) === url);
+        if (idx === -1) {
+            stationPool.push(val);
+            idx = stationPool.length - 1;
+        }
+        updatePlayerByIndex(idx);
+        closeMenu('customStationMenu');
+        customStationInput.value = '';
+    }
+
+    // --- Import/Export Favorites ---
+    importExportBtn.addEventListener('click', function() {
+        closeAllMenus();
+        // Export favorites as JSON
+        const exportObj = {
+            bookmarks: bookmarks,
+            stationNames: stationNames
+        };
+        exportFavoritesArea.value = JSON.stringify(exportObj, null, 2);
+        importExportMenu.style.display = 'flex';
+        importExportMsg.textContent = '';
+    });
+
+    function copyExportedFavorites() {
+        exportFavoritesArea.select();
+        document.execCommand('copy');
+        importExportMsg.textContent = 'Copied to clipboard!';
+        setTimeout(() => { importExportMsg.textContent = ''; }, 1200);
+    }
+
+    function importFavorites() {
+        let val = importFavoritesArea.value.trim();
+        if (!val) {
+            importExportMsg.textContent = 'Paste JSON to import.';
+            return;
+        }
+        try {
+            let obj = JSON.parse(val);
+            if (!obj.bookmarks || !Array.isArray(obj.bookmarks)) {
+                importExportMsg.textContent = "Invalid JSON: bookmarks missing.";
+                return;
+            }
+            bookmarks = obj.bookmarks;
+            stationNames = typeof obj.stationNames === 'object' ? obj.stationNames : {};
+            localStorage.setItem('bookmarks', JSON.stringify(bookmarks));
+            localStorage.setItem('stationNames', JSON.stringify(stationNames));
+            updateFavoritesList();
+            importExportMsg.textContent = "Favorites imported!";
+        } catch (e) {
+            importExportMsg.textContent = "Invalid JSON format.";
+        }
+    }
+
+    // --- On-Hold Button Logic (prevents click after hold) ---
+    function setupHold(element, holdAction, clickAction) {
+        let timer;
+        let held = false;
+        element.addEventListener('mousedown', (e) => {
+            held = false;
+            timer = setTimeout(() => {
+                held = true;
+                holdAction();
+            }, 1000);
+        });
+        element.addEventListener('mouseup', (e) => {
+            clearTimeout(timer);
+        });
+        element.addEventListener('mouseleave', (e) => {
+            clearTimeout(timer);
+        });
+        element.addEventListener('click', (event) => {
+            if (held) {
+                event.preventDefault();
+                held = false;
+                return;
+            }
+            clickAction();
+        });
+    }
+
+    // --- Button Actions ---
+    setupHold(prevBtn,
+        // On hold: Show name station popup (does NOT save to favorites)
+        () => {
+            let station = stationPool[currentStationIndex];
+            const id = typeof station === "number" ? String(station) : station;
+            nameStationInput.value = stationNames[id] || '';
+            showMenu('nameStationMenu');
+            nameStationInput.focus();
+        },
+        // On click: previous station
+        () => {
+            const idx = changeStation(-1);
+            if (idx !== null) updatePlayerByIndex(idx);
+        }
+    );
+    setupHold(nextBtn,
+        // On hold: Show station info
+        () => {
+            let station = stationPool[currentStationIndex];
+            const id = typeof station === "number" ? String(station) : station;
+            let name = stationNames[id] || `Station ${id}`;
+            let url = (typeof station === "number" || /^\d+$/.test(station))
+                ? `https://www.iheart.com/artist/${station}/?embed=true&theme=dark`
+                : normalizeIHeartUrl(station);
+            document.getElementById('stationInfo').innerHTML =
+                `<strong>Name:</strong> ${name}<br>
+                 <strong>ID:</strong> ${id}<br>
+                 <strong>URL:</strong> <a href="${url}" target="_blank" style="color:#ff69b4;">Open in new tab</a>`;
+            showMenu('stationInfoMenu');
+        },
+        // On click: next station
+        () => {
+            const idx = changeStation(1);
+            if (idx !== null) updatePlayerByIndex(idx);
+        }
+    );
+    setupHold(bookmarkBtn,
+        () => showMenu('favoritesMenu'),
+        () => showMenu('saveAsMenu')
+    );
+    setupHold(blacklistBtn,
+        () => showMenu('unblacklistMenu'),
+        addToBlacklist
+    );
+    // Random station: hold for custom entry, click for random
+    setupHold(randomStationBtn,
+        () => {
+            customStationInput.value = '';
+            showMenu('customStationMenu');
+            customStationInput.focus();
+        },
+        () => {
+            const idx = getRandomStationIndex();
+            if (idx !== null) updatePlayerByIndex(idx);
+        }
+    );
+
+    // --- Initialize ---
+    updatePlayerByIndex(currentStationIndex);
+    updateFavoritesList();
+    updateBlacklistList();
+
+    // Expose functions for inline onclicks
+    window.saveBookmark = saveBookmark;
+    window.closeMenu = closeMenu;
+    window.removeBookmark = removeBookmark;
+    window.removeFromBlacklist = removeFromBlacklist;
+    window.playStation = playStation;
+    window.toggleFavoritesOnly = toggleFavoritesOnly;
+    window.setStationName = setStationName;
+    window.goToCustomStation = goToCustomStation;
+    window.copyExportedFavorites = copyExportedFavorites;
+    window.importFavorites = importFavorites;
+</script>
+</body>
+</html>
